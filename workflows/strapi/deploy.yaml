@@ -1,0 +1,50 @@
+name: Build and Deploy to EC2
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+env:
+  NODE_VER: 18
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Use Node.js ${{ env.NODE_VER }}.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VER }}
+
+      - name: Create .env, Install Node Modules and Build
+        run: |
+          echo "${{ secrets.ENV_PROD }}" >>.env
+          if [ -f "yarn.lock" ]; then
+            if [ -z "$(command -v yarn)" ]; then
+              npm i -g yarn
+            fi
+            yarn install --frozen-lockfile
+            yarn build
+          else
+            npm ci --force
+            npm run build
+          fi
+
+      - name: Send changes to EC2 instance
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY_PROD }}
+          REMOTE_HOST: ${{ secrets.HOST_PROD }}
+          REMOTE_USER: ubuntu
+          TARGET: /home/ubuntu
+          EXCLUDE: node_modules/
+          SCRIPT_BEFORE: rm -rf node_modules
+          SCRIPT_AFTER: |
+            export DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}
+            export NODE_VER=${{ env.NODE_VER }}
+            bash .github/workflows/deploy.sh

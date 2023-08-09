@@ -1,0 +1,34 @@
+name: Build and Deploy to EC2
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+env:
+  NODE_VER: 18
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Create .env
+        run: |
+          echo "${{ secrets.ENV_PROD }}" >>.env
+
+      - name: Send changes to EC2 instance
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY_PROD }}
+          REMOTE_HOST: ${{ secrets.HOST_PROD }}
+          REMOTE_USER: ubuntu
+          TARGET: /home/ubuntu
+          SCRIPT_BEFORE: rm -rf node_modules
+          SCRIPT_AFTER: |
+            export DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}
+            export NODE_VER=${{ env.NODE_VER }}
+            bash .github/workflows/deploy.sh

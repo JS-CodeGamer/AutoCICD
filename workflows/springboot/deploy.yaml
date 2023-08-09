@@ -1,0 +1,39 @@
+name: Build and Deploy to EC2
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  JAVA_VER: "17"
+  PROJ_DIR: "SkillBookCMP/SkillBookCMP"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up JDK ${{ env.JAVA_VER }}
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ env.JAVA_VER }}
+          distribution: "oracle"
+
+      - name: Build with Maven
+        run: |
+          echo '${{ secrets.ENV_PROD }}' >${{ env.PROJ_DIR }}/.env
+          mvn -f ${{ env.PROJ_DIR }}/pom.xml clean install
+
+      - name: Send changes to EC2 instance
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY_PROD }}
+          REMOTE_HOST: ${{ secrets.HOST_PROD }}
+          REMOTE_USER: ubuntu
+          TARGET: /home/ubuntu
+          SOURCE: ${{ env.PROJ_DIR }}/target .github/workflows/deploy.sh ${{ env.PROJ_DIR }}/.env
+          SCRIPT_BEFORE: rm -rf ./*
+          SCRIPT_AFTER: DOMAIN_NAME=${{ secrets.DOMAIN_NAME }} JAVA_VER=${{ env.JAVA_VER }} bash deploy.sh
